@@ -1,1 +1,2 @@
 
+ g++ mini_slam.cpp   -std=c++17   -O2   -I./libs/Optimization/include   -I./include   -I/usr/include/eigen3   -L./build/lib   -lCORA     -o mini_slam
