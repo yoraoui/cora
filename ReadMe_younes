@@ -75,3 +75,6 @@ cmake .. \
   -DCMAKE_CXX_FLAGS="-O0 -g -fsanitize=address -fno-omit-frame-pointer"
 
 
+
+for paper experiment: sudo cmake ..   -DPERFORM_EXPERIMENTS=O  -DCMAKE_BUILD_TYPE=Debug   -DCMAKE_CXX_FLAGS="-O0 -g -fsanitize=address -fno-omit-frame-pointer"
+
