@@ -66,3 +66,12 @@ struct RelativePoseMeasurement : PairMeasurement {
           "2D and 3D rotations");
     }
   }
+
+
+to compile the examples use 
+
+cmake .. \
+  -DCMAKE_BUILD_TYPE=Debug \
+  -DCMAKE_CXX_FLAGS="-O0 -g -fsanitize=address -fno-omit-frame-pointer"
+
+
