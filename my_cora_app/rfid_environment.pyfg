@@ -1,0 +1,80 @@
+# =====================================================
+# VARIABLES
+# =====================================================
+
+POSE2 x0
+POSE2 x1
+POSE2 x2
+POSE2 x3
+POSE2 x4
+POSE2 x5
+POSE2 x6
+POSE2 x7
+POSE2 x8
+POSE2 x9
+
+POINT2 l0
+POINT2 l1
+POINT2 l2
+POINT2 l3
+POINT2 l4
+POINT2 l5
+POINT2 l6
+POINT2 l7
+
+# =====================================================
+# PRIORS (FIX GAUGE)
+# =====================================================
+
+PRIOR_POSE2 x0 30 70 0.0   1e-6 0 0   1e-6 0   1e-6
+
+PRIOR_POINT2 l0 20 40   1e-6 0   1e-6
+PRIOR_POINT2 l1 60 40   1e-6 0   1e-6
+PRIOR_POINT2 l2 100 40  1e-6 0   1e-6
+PRIOR_POINT2 l3 140 40  1e-6 0   1e-6
+
+PRIOR_POINT2 l4 20 80   1e-6 0   1e-6
+PRIOR_POINT2 l5 60 80   1e-6 0   1e-6
+PRIOR_POINT2 l6 100 80  1e-6 0   1e-6
+PRIOR_POINT2 l7 140 80  1e-6 0   1e-6
+
+# =====================================================
+# ODOMETRY (BETWEEN POSES)
+# dx dy dtheta
+# =====================================================
+
+BETWEEN_POSE2 x0 x1  5 5 0.0   0.2 0 0   0.2 0   0.05
+BETWEEN_POSE2 x1 x2  5 5 0.0   0.2 0 0   0.2 0   0.05
+BETWEEN_POSE2 x2 x3  5 5 0.0   0.2 0 0   0.2 0   0.05
+BETWEEN_POSE2 x3 x4  5 5 0.0   0.2 0 0   0.2 0   0.05
+BETWEEN_POSE2 x4 x5  5 0 0.0   0.2 0 0   0.2 0   0.05
+BETWEEN_POSE2 x5 x6  5 -5 0.0  0.2 0 0   0.2 0   0.05
+BETWEEN_POSE2 x6 x7  5 -5 0.0  0.2 0 0   0.2 0   0.05
+BETWEEN_POSE2 x7 x8  5 -5 0.0  0.2 0 0   0.2 0   0.05
+BETWEEN_POSE2 x8 x9  5 -5 0.0  0.2 0 0   0.2 0   0.05
+
+# =====================================================
+# RFID RANGE MEASUREMENTS
+# pose  landmark  distance  sigma
+# =====================================================
+
+RANGE x0 l0 36.0  0.5
+RANGE x1 l0 32.0  0.5
+RANGE x1 l4 15.0  0.5
+
+RANGE x2 l4 18.0  0.5
+RANGE x2 l5 25.0  0.5
+
+RANGE x3 l5 22.0  0.5
+RANGE x3 l6 30.0  0.5
+
+RANGE x4 l6 28.0  0.5
+RANGE x4 l7 40.0  0.5
+
+RANGE x5 l7 35.0  0.5
+RANGE x6 l6 25.0  0.5
+
+RANGE x7 l5 20.0  0.5
+RANGE x8 l4 22.0  0.5
+
+RANGE x9 l1 30.0  0.5

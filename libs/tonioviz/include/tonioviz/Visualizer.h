@@ -1,0 +1,389 @@
+/**
+ * @file Visualizer.h
+ * @brief Simple multi-threaded 3D graph visualization based on Pangolin.
+ * @author Tonio Teran, teran@mit.edu
+ * Copyright 2020 The Ambitious Folks of the MRG
+ */
+
+#ifndef TONIOVIZ_VISUALIZER_H_
+#define TONIOVIZ_VISUALIZER_H_
+
+#include <pangolin/pangolin.h>
+#include <pangolin/scene/axis.h>
+#include <pangolin/scene/scenehandler.h>
+
+#include <Eigen/Dense>
+// NOLINTNEXTLINE
+#include <mutex>
+#include <string>
+#include <tuple>
+#include <vector>
+
+// OpenCV includes.
+#include <opencv2/opencv.hpp>
+
+namespace mrg {
+
+/// Trajectory consisting of vector of Eigen-aligned 4x4 SE(3) matrices.
+typedef std::vector<Eigen::Matrix4d, Eigen::aligned_allocator<Eigen::Matrix4d>>
+    Trajectory3;
+/// 3D Pose with axes length (1st double) and line width (2nd double) for viz.
+typedef std::tuple<Eigen::Matrix4d, double, double> VizPose;
+
+/// 3D Position of landmark
+typedef Eigen::Vector3d VizLandmark;
+
+struct Color {
+  double r;
+  double g;
+  double b;
+};
+
+// premade list of colors to cycle through for different trajectories
+const std::vector<Color> kTrajectoryColors = {
+    {0.0, 0.0, 1.0},  // Blue
+    {0.0, 1.0, 0.0},  // Green
+    {1.0, 0.0, 0.0},  // Red
+    {1.0, 0.0, 1.0},  // Magenta
+    {0.0, 1.0, 1.0},  // Cyan
+    {1.0, 1.0, 0.0},  // Yellow
+    {0.5, 0.5, 0.5},  // Gray
+    {1.0, 0.5, 0.0},  // Orange
+    {0.5, 0.0, 1.0},  // Purple
+    {0.0, 0.5, 1.0}   // Light Blue
+};
+
+/**
+ * @brief Type of visualization modes available.
+ */
+enum class VisualizerMode { GRAPHONLY, MONO, STEREO };
+
+/**
+ * @brief Type of keyframe representation for drawing.
+ */
+enum class KeyframeDrawType { kFrustum, kTriad, kPoint };
+enum class LandmarkDrawType { kCross, kPoint };
+enum class RangeDrawType { kCircle, kLine };
+/**
+ * @brief Struct to hold circles with radius `r` for drawing at (`x`,`y`).
+ */
+struct Range {
+  Eigen::Vector3d p1;
+  double r;
+
+  // Optional params for drawing as a line
+  Eigen::Vector3d p2;
+  bool has_p2;
+
+  Range(Eigen::Vector3d p1, double r) : p1(p1), r(r), has_p2(false) {};
+  Range(Eigen::Vector3d p1, Eigen::Vector3d p2, double r)
+      : p1(p1), r(r), p2(p2), has_p2(true) {};
+
+  Eigen::Vector3d getDirection() const {
+    if (has_p2) {
+      return (p2 - p1).normalized();
+    } else {
+      throw std::runtime_error("No direction for range without p2");
+    }
+  }
+};
+
+/**
+ * @brief Struct to hold the configuration parameters for the visualizer.
+ */
+struct VisualizerParams {
+  float w = 1200.0f;  ///< Width of the screen [px].
+  float h = 800.0f;   ///< Heigh of the screen [px].
+  float f = 300.0f;   ///< Focal distance of the visualization camera [px].
+
+  int imgwidth = 672;   ///< Width of the image to view [px].
+  int imgheight = 376;  ///< Height of the image to view [px].
+
+  VisualizerMode mode = VisualizerMode::GRAPHONLY;  ///< Type of visualizer.
+
+  KeyframeDrawType kftype = KeyframeDrawType::kFrustum;  ///< Keyframe type.
+  LandmarkDrawType landtype = LandmarkDrawType::kPoint;  ///< Landmark type.
+  RangeDrawType rangetype = RangeDrawType::kCircle;      ///< Range type.
+
+  double frustum_scale = 0.1;  ///< Size of frustum [m].
+
+  Color landmark_color{1.0, 0, 0};
+  Color range_color{0, 1.0, 0};
+  Color bg_color{1.0, 1.0, 1.0};  // background color
+};
+
+struct VisualizerState {
+  bool show_traj = true;
+  bool show_landmark = true;
+  bool show_help = false;
+  bool show_ranges = true;
+  bool show_only_latest = false;
+  bool show_z0 = true;
+  bool rotate_around_z = false;
+  bool show_just_traj_lines = false; // no frustrums or triads
+};
+
+/**
+ * @class Visualizer
+ * @brief Class for wrapping OpenGL and Pangoling to visualize in 3D. Will
+ * default to single trajectory visualization but allows for visualizing
+ * multiple trajectories.
+ */
+class Visualizer {
+ public:
+  EIGEN_MAKE_ALIGNED_OPERATOR_NEW
+  /**
+   * @brief Default constructor.
+   * @param params  Structure with configuration parameters.
+   */
+  explicit Visualizer(const VisualizerParams& params = VisualizerParams());
+
+  /**
+   * @brief Default destructor.
+   */
+  ~Visualizer();
+
+  /**
+   * @brief Main visualization for Simple3dWorld that does all the drawing.
+   */
+  void RenderWorld();
+
+  inline void AddRangeMeasurement(const Range c) {
+    vizmtx_.lock();
+    ranges_.push_back(c);
+    vizmtx_.unlock();
+  }
+
+  /**
+   * @brief Add a visualization pose element. For multiple trajectories.
+   * @param[in] vpose   Visualization tuple with pose, axes length, and width.
+   */
+  inline void AddVizPose(const VizPose& vpose, int traj_ind = 0) {
+    AddVizPoses({vpose}, traj_ind);
+  }
+
+  /**
+   * @brief Add a visualization pose element; overload with individual elements.
+   * For multiple trajectories.
+   * @param[in] pose     3D pose of triad to visualize.
+   * @param[in] length   Length of the pose axes.
+   * @param[in] width    Width of the pose axes..
+   */
+  void AddVizPose(const Eigen::Matrix4d& pose, const double length,
+                  const double width, int traj_ind = 0);
+
+  /**
+   * @brief Same as above, but for multiple poses at a time. For multiple
+   * trajectories.
+   * @param[in] vposes   Vector of visualization poses.
+   */
+  void AddVizPoses(const std::vector<VizPose>& vposes, int traj_ind = 0);
+
+  /**
+   * @brief Same as above, but for multiple poses at the same time. For multiple
+   * trajectories.
+   * @param[in] poses    Vector of 3D poses to visualize.
+   * @param[in] length   Length of the pose axes.
+   * @param[in] width    Width of the pose axes.
+   */
+  void AddVizPoses(const Trajectory3& poses, const double length,
+                   const double width, int traj_ind = 0);
+
+  /**
+   * @brief Adds a landmark to be visualized
+   *
+   * @param vl landmark
+   */
+  inline void AddVizLandmark(const VizLandmark& vl) { AddVizLandmarks({vl}); }
+
+  /**
+   * @brief Adds multiple landmarks to be visualized
+   *
+   * @param landmarks vector of landmarks to visualize
+   */
+  void AddVizLandmarks(const std::vector<VizLandmark>& landmarks);
+
+  /**
+   * @brief Add a single image to visualize on top of the estimates.
+   * @param[in] img  OpenCV image to be visualized.
+   */
+  void AddImage(const cv::Mat& img);
+
+  /**
+   * @brief Add both left and right images to be visualized on screen.
+   * @param[in] left   Left OpenCV image to be visualized.
+   * @param[in] right  Right OpenCV image to be visualized.
+   */
+  void AddStereo(const cv::Mat& left, const cv::Mat& right);
+
+  /**
+   * @brief Get the internal copy of the parameters used for construction.
+   * @return The internal parameters structure.
+   */
+  inline VisualizerParams Params() const { return p_; }
+
+  /**
+   * @brief Clears all the stored information.
+   */
+  inline void Clear() {
+    vizmtx_.lock();
+    for (auto& pose_vector : pose_vectors_) {
+      pose_vector.clear();
+    }
+    pose_vectors_.clear();
+    num_poses = 0;
+    landmarks_.clear();
+    ranges_.clear();
+    xy_range_.setZero();
+    updateXYRange();
+    vizmtx_.unlock();
+  }
+
+  /**
+   * @brief Allows to check if the visualizer has been told to force quit
+   */
+  inline bool HasForcedQuit() { return forced_quit_; }
+
+  /**
+   * @brief Set the Ready To Render flag -- this can be used to avoid rendering
+   * partially updated data in a multi-threaded environment
+   *
+   * @param ready
+   */
+  inline void setReadyToRender(bool ready) { ready_to_render_ = ready; }
+
+ private:
+  /**
+   * @brief Renders the trajectory as a sequence of poses.
+   * @param[in] trajectory  Eigen-aligned vector of 3D poses.
+   */
+  void DrawTrajectory(const Trajectory3& trajectory,
+                      const double axesLength = 0.2, uint traj_idx = 0) const;
+
+  /**
+   * @brief Overload to render a trajectory of pose tuples.
+   * @param[in] trajectory  Eigen-aligned vector of visualization pose tuples.
+   */
+  void DrawTrajectory(const std::vector<VizPose>& trajectory,
+                      uint traj_idx = 0) const;
+
+  inline void DrawLandmarks(const std::vector<VizLandmark>& landmarks,
+                            Color color = Color{1, 0, 0}) const {
+    // Draw all landmarks
+    glColor3f(color.r, color.g, color.b);
+    glLineWidth(2.0);
+
+    // get the xy range of the viewer
+    double x_min = xy_range_(0);
+    double x_max = xy_range_(2);
+    double y_min = xy_range_(1);
+    double y_max = xy_range_(3);
+    auto largest_range = std::max(x_max - x_min, y_max - y_min);
+
+    // landmark radius should be a percentage of the largest of the x or y range
+    double rad = largest_range * 0.02;
+    if (p_.landtype == LandmarkDrawType::kCross) {
+      for (const VizLandmark& vl : landmarks) {
+        pangolin::glDrawCross(vl, rad);
+      }
+    } else if (p_.landtype == LandmarkDrawType::kPoint) {
+      glPointSize(rad);
+      pangolin::glDrawPoints(landmarks);
+    } else {
+      std::cerr << "Attempted landmark visualization is not supported"
+                << std::endl;
+      assert(false);
+    }
+
+    glLineWidth(1.0);
+  }
+
+  inline void DrawLandmarks() const { DrawLandmarks(landmarks_); }
+
+  inline void DrawRanges() const { DrawRanges(ranges_); }
+
+  inline void DrawRanges(const std::vector<Range>& ranges,
+                         Color color = Color{0, 1, 0}) const {
+    for (const Range range : ranges) {
+      DrawRange(range, color);
+    }
+  }
+
+  inline void DrawRange(Range c, Color color) const {
+    glColor3f(color.r, color.g, color.b);
+    if (p_.rangetype == RangeDrawType::kCircle) {
+      pangolin::glDrawCirclePerimeter(c.p1.x(), c.p1.y(), c.r);
+    } else if (p_.rangetype == RangeDrawType::kLine && c.has_p2) {
+      Eigen::Vector3d range_dir = c.getDirection();
+      Eigen::Vector3d p2_with_range = c.p1 + range_dir * c.r;
+      pangolin::glDrawLine(c.p1.x(), c.p1.y(), c.p1.z(), p2_with_range.x(),
+                           p2_with_range.y(), p2_with_range.z());
+    } else {
+      throw std::runtime_error(
+          "Attempted range visualization is not supported");
+    }
+  }
+
+  void registerPangolinCallback(char key, std::string description,
+                                std::function<void(void)> callback);
+
+  VisualizerState vis_state;
+  void updateXYRange();
+
+  void DrawHelp() const;
+
+  VisualizerParams p_;  ///< Internal copy of the configuration parameters.
+  Eigen::Vector4d xy_range_{0, 0, 0, 0};
+
+  std::map<char, std::string> keybinds_;
+
+  const std::string _window_name =
+      "mrg official viewer";  // name of the visualizer window
+  bool forced_quit_ = false;
+
+  // Manually-modifiable variables.
+  std::vector<std::vector<VizPose>>
+      pose_vectors_;  ///< 2D vector of poses to represent multiple trajectories
+  std::vector<VizLandmark> landmarks_;
+  std::vector<Range> ranges_;
+
+  int num_poses{0};
+
+  // OpenCV and image related variables.
+  cv::Mat imgL_, imgR_;  ///< Left and right images.
+
+  // For safe threading.
+  mutable std::mutex vizmtx_;
+  bool ready_to_render_ = true;
+
+  // Frustum rotation to align with +X axis (instead of +Z). Just a rotation of
+  // 90deg about +Z, followed by a 90deg rotation about +Y.
+  // clang-format off
+  const Eigen::Matrix4d T_frustum_ =
+      (Eigen::Matrix4d() << 0, 0, 1, 0,
+                            1, 0, 0, 0,
+                            0, 1, 0, 0,
+                            0, 0, 0, 1).finished();
+  // clang-format on
+
+  // Frustum shape (width and height).
+  const int frustum_w_ = 2, frustum_h_ = 1;
+  // Parameter matrix for the frustum shape, of the following form:
+  //
+  //         [ fu      u0 ]
+  //  Kinv = [     fv  v0 ]
+  //         [          1 ]
+  //
+  // We're assuming a frustum of width = 2 and height = 1, yielding u0 = -1 and
+  // v0 = -0.5, with fu = fv = 1.
+  // clang-format off
+  const Eigen::Matrix3d K_frustum_ =
+       (Eigen::Matrix3d() << 1, 0, -1.0,
+                             0, 1, -0.5,
+                             0, 0,  1.0).finished();
+  // clang-format on
+};
+
+}  // namespace mrg
+
+#endif  // TONIOVIZ_VISUALIZER_H_
