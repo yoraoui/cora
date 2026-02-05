@@ -1,0 +1,15 @@
+{
+  "init_rank_jump": 1,
+  "max_rank": 10,
+  "verbose": true,
+  "log_iterates": false,
+  "show_iterates": false,
+  "preconditioner": "RegularizedCholesky",
+  "formulation": "Implicit",
+  "init_type": "Random",
+  "files": ["data/test.pyfg"],
+  "step_size": 0.05,
+  "max_iter": 200,
+  "theta_init": 1.0,
+  "trajectory_file": "trajectory.txt"
+}
