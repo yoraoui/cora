@@ -132,3 +132,14 @@ If you use this code in your research, please cite the following paper:
 **Error** `error while loading shared libraries: libpango_windowing.so: cannot open shared object file: No such file or directory`
 
 **Solution**: run `sudo ldconfig`
+
+
+
+
+
+
+
+
+I found this file that do processing for pyfg files
+
+/home/raoui/miniconda3/lib/python3.13/site-packages/py_factor_graph/factor_graph.py
